@@ -4,6 +4,7 @@ import com.appsmith.external.dtos.ExecuteActionDTO;
 import com.appsmith.external.exceptions.pluginExceptions.AppsmithPluginError;
 import com.appsmith.external.exceptions.pluginExceptions.AppsmithPluginException;
 import com.appsmith.external.helpers.MustacheHelper;
+import com.appsmith.external.helpers.ServerEnvVars;
 import com.appsmith.external.models.ActionConfiguration;
 import com.appsmith.external.models.ActionExecutionResult;
 import com.appsmith.external.models.DatasourceConfiguration;
@@ -305,6 +306,15 @@ public interface PluginExecutor<C> extends ExtensionPoint, CrudTemplateService {
             ActionConfiguration actionConfiguration,
             ObservationRegistry observationRegistry,
             Map<String, Boolean> featureFlagMap) {
+        // Pre-substitute server-side env vars (e.g. {{env.PG_KEY}}) before any
+        // plugin-specific handling. Values come from Docker/system env vars with
+        // a configurable prefix (default APPSMITH_ENV_).
+        Map<String, String> envVars = ServerEnvVars.getSubstitutionMap();
+        if (!envVars.isEmpty()) {
+            MustacheHelper.renderFieldValues(actionConfiguration, envVars);
+            MustacheHelper.renderFieldValues(datasourceConfiguration, envVars);
+        }
+
         this.sanitiseNullsInParams(executeActionDTO);
         return this.executeParameterizedWithFlags(
                         connection, executeActionDTO, datasourceConfiguration, actionConfiguration, featureFlagMap)

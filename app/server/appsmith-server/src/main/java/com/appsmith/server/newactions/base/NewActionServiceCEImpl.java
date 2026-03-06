@@ -4,6 +4,7 @@ import com.appsmith.external.dtos.ExecutePluginDTO;
 import com.appsmith.external.dtos.RemoteDatasourceDTO;
 import com.appsmith.external.git.constants.ce.RefType;
 import com.appsmith.external.helpers.MustacheHelper;
+import com.appsmith.external.helpers.ServerEnvVars;
 import com.appsmith.external.models.ActionConfiguration;
 import com.appsmith.external.models.ActionDTO;
 import com.appsmith.external.models.CreatorContextType;
@@ -531,6 +532,11 @@ public class NewActionServiceCEImpl extends BaseService<NewActionRepository, New
                     Set<String> keys = new HashSet<>();
                     keys.addAll(actionKeys);
                     keys.addAll(datasourceKeys);
+
+                    // Server-side env var bindings (env.*) are resolved on the
+                    // backend — strip them so the client does not attempt to
+                    // evaluate them against the DataTree.
+                    keys.removeIf(ServerEnvVars::isEnvVarKey);
 
                     action.setJsonPathKeys(keys);
                     return newAction;
