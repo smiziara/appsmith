@@ -15,11 +15,18 @@ import java.util.Map;
  *
  * <p>The prefix itself is configurable via the system env var
  * {@code APPSMITH_ENV_VAR_PREFIX}.
+ *
+ * <p><b>Safety rule:</b> env vars whose names start with {@code APPSMITH_}
+ * but <em>not</em> with {@code APPSMITH_ENV_} are always blocked, regardless
+ * of the configured prefix. This prevents a broad/short custom prefix from
+ * accidentally exposing internal secrets such as {@code APPSMITH_DB_URL} or
+ * {@code APPSMITH_ENCRYPTION_PASSWORD}.
  */
 public final class ServerEnvVars {
 
     static final String DEFAULT_PREFIX = "APPSMITH_ENV_";
     static final String BINDING_NAMESPACE = "env.";
+    static final String INTERNAL_PREFIX = "APPSMITH_";
 
     private static final String PREFIX = resolvePrefix();
 
@@ -39,11 +46,14 @@ public final class ServerEnvVars {
     }
 
     /**
-     * Returns {@code true} if the given mustache key references a
-     * server-side env var (i.e. starts with {@code "env."}).
+     * Returns {@code true} if the given mustache key (after trimming)
+     * references a server-side env var (i.e. starts with {@code "env."}).
+     *
+     * <p>Trimming is applied to match the behaviour of
+     * {@link MustacheHelper#render}, which trims keys before lookup.
      */
     public static boolean isEnvVarKey(String key) {
-        return key != null && key.startsWith(BINDING_NAMESPACE);
+        return key != null && key.trim().startsWith(BINDING_NAMESPACE);
     }
 
     private static String resolvePrefix() {
@@ -51,11 +61,21 @@ public final class ServerEnvVars {
         return (custom != null && !custom.isBlank()) ? custom : DEFAULT_PREFIX;
     }
 
+    /**
+     * Returns {@code true} if the env var name belongs to Appsmith's
+     * internal configuration and must never be exposed, regardless of
+     * the configured prefix.
+     */
+    static boolean isBlockedInternalVar(String envVarName) {
+        return envVarName.startsWith(INTERNAL_PREFIX) && !envVarName.startsWith(DEFAULT_PREFIX);
+    }
+
     private static Map<String, String> buildSubstitutionMap() {
         Map<String, String> map = new HashMap<>();
         for (Map.Entry<String, String> entry : System.getenv().entrySet()) {
-            if (entry.getKey().startsWith(PREFIX) && entry.getKey().length() > PREFIX.length()) {
-                String shortKey = BINDING_NAMESPACE + entry.getKey().substring(PREFIX.length());
+            String name = entry.getKey();
+            if (name.startsWith(PREFIX) && name.length() > PREFIX.length() && !isBlockedInternalVar(name)) {
+                String shortKey = BINDING_NAMESPACE + name.substring(PREFIX.length());
                 map.put(shortKey, entry.getValue());
             }
         }

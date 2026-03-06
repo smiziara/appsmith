@@ -12,10 +12,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class ServerEnvVarsTest {
 
+    // ---- isEnvVarKey ----
+
     @Test
     void isEnvVarKey_withEnvPrefix_returnsTrue() {
         assertThat(ServerEnvVars.isEnvVarKey("env.PG_KEY")).isTrue();
         assertThat(ServerEnvVars.isEnvVarKey("env.X")).isTrue();
+    }
+
+    @Test
+    void isEnvVarKey_withLeadingTrailingSpaces_returnsTrue() {
+        assertThat(ServerEnvVars.isEnvVarKey(" env.PG_KEY")).isTrue();
+        assertThat(ServerEnvVars.isEnvVarKey("  env.PG_KEY  ")).isTrue();
+        assertThat(ServerEnvVars.isEnvVarKey(" env.X ")).isTrue();
     }
 
     @Test
@@ -25,16 +34,46 @@ class ServerEnvVarsTest {
         assertThat(ServerEnvVars.isEnvVarKey("environment.PG_KEY")).isFalse();
         assertThat(ServerEnvVars.isEnvVarKey(null)).isFalse();
         assertThat(ServerEnvVars.isEnvVarKey("")).isFalse();
+        assertThat(ServerEnvVars.isEnvVarKey("   ")).isFalse();
     }
+
+    // ---- isBlockedInternalVar ----
+
+    @Test
+    void isBlockedInternalVar_blocksAppsmithSecrets() {
+        assertThat(ServerEnvVars.isBlockedInternalVar("APPSMITH_DB_URL")).isTrue();
+        assertThat(ServerEnvVars.isBlockedInternalVar("APPSMITH_ENCRYPTION_PASSWORD"))
+                .isTrue();
+        assertThat(ServerEnvVars.isBlockedInternalVar("APPSMITH_ENCRYPTION_SALT"))
+                .isTrue();
+        assertThat(ServerEnvVars.isBlockedInternalVar("APPSMITH_REDIS_URL")).isTrue();
+        assertThat(ServerEnvVars.isBlockedInternalVar("APPSMITH_CLOUD_SERVICES_BASE_URL"))
+                .isTrue();
+    }
+
+    @Test
+    void isBlockedInternalVar_allowsExplicitEnvVars() {
+        assertThat(ServerEnvVars.isBlockedInternalVar("APPSMITH_ENV_PG_KEY")).isFalse();
+        assertThat(ServerEnvVars.isBlockedInternalVar("APPSMITH_ENV_TOKEN")).isFalse();
+    }
+
+    @Test
+    void isBlockedInternalVar_allowsNonAppsmithVars() {
+        assertThat(ServerEnvVars.isBlockedInternalVar("MY_CUSTOM_SECRET")).isFalse();
+        assertThat(ServerEnvVars.isBlockedInternalVar("PATH")).isFalse();
+    }
+
+    // ---- getSubstitutionMap ----
 
     @Test
     void getSubstitutionMap_returnsImmutableMap() {
         Map<String, String> map = ServerEnvVars.getSubstitutionMap();
         assertThat(map).isNotNull();
-        // Must be unmodifiable
         org.junit.jupiter.api.Assertions.assertThrows(
                 UnsupportedOperationException.class, () -> map.put("env.TEST", "value"));
     }
+
+    // ---- MustacheHelper integration ----
 
     @Test
     void renderFieldValues_substitutesEnvVarsInActionBody() {
@@ -46,6 +85,18 @@ class ServerEnvVarsTest {
         MustacheHelper.renderFieldValues(config, envMap);
 
         assertThat(config.getBody()).isEqualTo("SELECT pgp_sym_decrypt(col, 'my-secret') FROM users");
+    }
+
+    @Test
+    void renderFieldValues_substitutesEnvVarsWithSpacesInBinding() {
+        Map<String, String> envMap = Map.of("env.PG_KEY", "my-secret");
+
+        ActionConfiguration config = new ActionConfiguration();
+        config.setBody("SELECT '{{ env.PG_KEY }}' AS key");
+
+        MustacheHelper.renderFieldValues(config, envMap);
+
+        assertThat(config.getBody()).isEqualTo("SELECT 'my-secret' AS key");
     }
 
     @Test
