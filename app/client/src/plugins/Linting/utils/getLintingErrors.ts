@@ -101,6 +101,8 @@ export function generateLintingGlobalData(
     objectKeys(SUPPORTED_WEB_APIS).forEach(
       (apiName) => (globalData[apiName] = true),
     );
+    // Server-side env var namespace resolved by the backend
+    globalData["env"] = true;
   } else {
     globalData = {
       setTimeout: "readonly",
@@ -155,6 +157,8 @@ export function generateLintingGlobalData(
     objectKeys(SUPPORTED_WEB_APIS).forEach(
       (apiName) => (globalData[apiName] = "readonly"),
     );
+    // Server-side env var namespace resolved by the backend
+    globalData["env"] = "readonly";
   }
 
   return { globalData, asyncFunctions, ideType };

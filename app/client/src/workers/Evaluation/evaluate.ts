@@ -284,6 +284,20 @@ export const createEvaluationContext = (args: createEvaluationContextArgs) => {
 
   overrideEvalContext(EVAL_CONTEXT, context?.overrideContext);
 
+  // Server-side env var namespace: any `env.X` access returns the mustache
+  // token as a placeholder. The `has` trap reports all properties as present
+  // so the AST property validator does not flag them as invalid.
+  // Actual values are resolved by the backend at query execution time.
+  if (!("env" in EVAL_CONTEXT)) {
+    EVAL_CONTEXT.env = new Proxy(
+      {},
+      {
+        get: (_t, p) => (typeof p === "string" ? `{{env.${p}}}` : undefined),
+        has: (_t, p) => typeof p === "string",
+      },
+    );
+  }
+
   return EVAL_CONTEXT;
 };
 
@@ -422,6 +436,16 @@ export function evaluateSync(
     }
 
     overrideEvalContext(EVAL_CONTEXT, context?.overrideContext);
+
+    if (!("env" in EVAL_CONTEXT)) {
+      EVAL_CONTEXT.env = new Proxy(
+        {},
+        {
+          get: (_t, p) => (typeof p === "string" ? `{{env.${p}}}` : undefined),
+          has: (_t, p) => typeof p === "string",
+        },
+      );
+    }
 
     Object.assign(self, EVAL_CONTEXT);
 
