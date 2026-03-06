@@ -24,7 +24,9 @@ RUN mkdir -p /artifacts/server/mongo \
   && cp app/server/appsmith-server/target/server-*.jar /artifacts/server/mongo/server.jar \
   && find app/server/appsmith-plugins/*/target -name "*.jar" ! -name "original-*" -exec cp {} /artifacts/server/mongo/ \;
 
-# ─── Stage 3: Build client (Node 20 + Yarn) ─────────────────────────────────
+# ─── Stage 3: Build client + RTS (Node 20 + Yarn) ───────────────────────────
+# RTS lives inside the Yarn workspace and shares dependencies with the client,
+# so both are built in a single stage to avoid workspace resolution errors.
 FROM node:20.11.1 AS client-builder
 WORKDIR /build
 COPY app/client app/client
@@ -33,22 +35,9 @@ RUN corepack enable \
   && yarn install \
   && REACT_APP_ENVIRONMENT=PRODUCTION \
      REACT_APP_CLIENT_LOG_LEVEL=ERROR \
-     node --max-old-space-size=8192 scripts/build.js
-
-# ─── Stage 4: Build RTS ─────────────────────────────────────────────────────
-FROM node:20.11.1 AS rts-builder
-WORKDIR /build
-COPY app/client/packages/rts app/client/packages/rts
-COPY app/client/package.json app/client/package.json
-COPY app/client/yarn.lock app/client/yarn.lock
-COPY app/client/.yarnrc.yml app/client/.yarnrc.yml
-COPY app/client/.yarn app/client/.yarn
-COPY app/client/packages/ast app/client/packages/ast
-RUN corepack enable \
-  && cd app/client/packages/rts \
-  && yarn install --immutable \
-  && yarn run tsc --noEmit \
-  && rm -rf dist && node build.js
+     node --max-old-space-size=8192 scripts/build.js \
+  && cd packages/rts \
+  && rm -rf dist && yarn run tsc --noEmit && node build.js
 
 # ─── Stage 5: Generate info.json ────────────────────────────────────────────
 FROM ubuntu:24.04 AS info-gen
@@ -143,7 +132,7 @@ COPY --from=server-builder /artifacts/server /opt/appsmith/server
 COPY --from=client-builder /build/app/client/build /opt/appsmith/editor/
 
 # Copy RTS
-COPY --from=rts-builder /build/app/client/packages/rts/dist /opt/appsmith/rts/
+COPY --from=client-builder /build/app/client/packages/rts/dist /opt/appsmith/rts/
 
 RUN mkdir --mode 775 "/dev/shm/git-storage"
 
