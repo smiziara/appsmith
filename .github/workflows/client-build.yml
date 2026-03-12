@@ -205,28 +205,6 @@ jobs:
         run: |
           tar -cvf ./build.tar -C build .
 
-      - name: Fetch client build from cache
-        if: steps.changed-files-specific.outputs.any_changed == 'false' && success()  && github.event_name != 'push' && github.event_name != 'workflow_dispatch'  && github.event_name != 'schedule'
-        env:
-          cachetoken: ${{ secrets.CACHETOKEN }}
-          reponame: ${{ github.event.repository.name }}
-          gituser: ${{ secrets.CACHE_GIT_USER }}
-          gituseremail: ${{ secrets.CACHE_GIT_EMAIL }}
-        run: |
-          mkdir cacherepo
-          cd ./cacherepo
-          git lfs install
-          git config --global user.email "$gituseremail"
-          git config --global user.name "$gituser"
-          git clone https://$cachetoken@github.com/appsmithorg/cibuildcache.git
-          if [ "$reponame" = "appsmith" ]; then export repodir="CE"; fi
-          if [ "$reponame" = "appsmith-ee" ]; then export repodir="EE"; fi
-          cd cibuildcache/$repodir/release/client
-          git lfs install
-          git lfs migrate import --everything --yes
-          git lfs pull ./build.tar
-          mv ./build.tar ../../../../../build.tar
-
       # Upload the build artifact so that it can be used by the test & deploy job in the workflow
       - name: Upload react build bundle
         uses: actions/upload-artifact@v4
@@ -234,33 +212,6 @@ jobs:
           name: client-build
           path: app/client/build.tar
           overwrite: true
-
-      - name: Put release build in cache
-        if: success() && github.ref == 'refs/heads/release' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
-        env:
-          cachetoken: ${{ secrets.CACHETOKEN }}
-          reponame: ${{ github.event.repository.name }}
-          gituser: ${{ secrets.CACHE_GIT_USER }}
-          gituseremail: ${{ secrets.CACHE_GIT_EMAIL }}
-        # git lfs update --force in the script below overrides appsmith git hooks with git lfs hooks since appsmith hooks are not required during workflow runs
-        run: |
-          pwd
-          mkdir cacherepo
-          cd ./cacherepo
-          git config --global user.email "$gituseremail"
-          git config --global user.name "$gituser"
-          git clone https://$cachetoken@github.com/appsmithorg/cibuildcache.git
-          git lfs update --force
-          git lfs install
-          cd cibuildcache/
-          if [ "$reponame" = "appsmith" ]; then export repodir="CE"; fi
-          if [ "$reponame" = "appsmith-ee" ]; then export repodir="EE"; fi
-          cd $repodir/release/client
-          cp ../../../../../build.tar ./
-          git lfs track "build.tar"
-          git add  build.tar
-          git commit --allow-empty -m "Update Latest build.tar"
-          git push
 
       # Set status = success
       - name: Save the status of the run
