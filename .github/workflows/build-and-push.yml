@@ -2,6 +2,11 @@ name: Build and Push Docker Image
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Docker image tag (optional, in addition to latest)"
+        required: false
+        type: string
 
 jobs:
   server-build:
@@ -83,15 +88,18 @@ jobs:
 
       - name: Build and push
         run: |
-          image="ghcr.io/${{ github.repository }}:${GITHUB_REF_NAME//\//-}"
-          image_latest="ghcr.io/${{ github.repository }}:latest"
+          repo="ghcr.io/${{ github.repository }}"
+          tags=("-t" "$repo:latest")
+
+          custom_tag="${{ inputs.tag }}"
+          if [[ -n "$custom_tag" ]]; then
+            tags+=("-t" "$repo:$custom_tag")
+          fi
 
           docker build \
             --build-arg BASE=appsmith/base-ce:release \
             --build-arg APPSMITH_CLOUD_SERVICES_BASE_URL=https://release-cs.appsmith.com \
-            -t "$image" \
-            -t "$image_latest" \
+            "${tags[@]}" \
             .
 
-          docker push "$image"
-          docker push "$image_latest"
+          docker push --all-tags "$repo"
